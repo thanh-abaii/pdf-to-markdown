@@ -20,7 +20,7 @@ export default function App() {
   const [markdown, setMarkdown] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'preview' | 'markdown'>('preview');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{message: string, isDismissible: boolean} | null>(null);
   const [customApiKey, setCustomApiKey] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-pro');
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
@@ -85,9 +85,11 @@ export default function App() {
     }
   };
 
-  const handleError = (msg: string) => {
-    setError(msg);
-    setTimeout(() => setError(null), 5000);
+  const handleError = (msg: string, autoHide = true) => {
+    setError({ message: msg, isDismissible: !autoHide });
+    if (autoHide) {
+      setTimeout(() => setError(null), 8000);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,7 +154,12 @@ export default function App() {
         const base64Data = (reader.result as string).split(',')[1];
         
         try {
-          const response = await ai.models.generateContentStream({
+          // Add a timeout promise to prevent infinite hanging if the SDK gets stuck
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("Request timed out after 60 seconds. The model might be overloaded or your API key doesn't have access.")), 60000);
+          });
+
+          const apiCallPromise = ai.models.generateContentStream({
             model: selectedModel,
             contents: [
               {
@@ -174,6 +181,8 @@ export default function App() {
             }
           });
 
+          const response = await Promise.race([apiCallPromise, timeoutPromise]) as any;
+
           let fullMarkdown = '';
           for await (const chunk of response) {
             if (chunk.text) {
@@ -181,9 +190,23 @@ export default function App() {
               setMarkdown(fullMarkdown);
             }
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error generating content:', error);
-          handleError('An error occurred during conversion. Please check the console for details.');
+          let errorMessage = 'An error occurred during conversion.';
+          
+          if (error?.status === 403) {
+            errorMessage = `Access Denied (403): Your API key does not have permission to use ${selectedModel}. Please open Settings and select Gemini 2.5 Pro.`;
+          } else if (error?.status === 404) {
+            errorMessage = `Model Not Found (404): ${selectedModel} is not available for your API key. Please open Settings and select Gemini 2.5 Pro.`;
+          } else if (error?.status === 429) {
+            errorMessage = 'Rate Limit Exceeded (429): You have sent too many requests. Please wait a moment and try again.';
+          } else if (error?.status === 503) {
+            errorMessage = 'Service Unavailable (503): The Gemini API is currently overloaded. Please try again later.';
+          } else if (error?.message) {
+            errorMessage = `API Error: ${error.message}`;
+          }
+          
+          handleError(errorMessage, false); // Don't auto-hide critical API errors
         } finally {
           setIsConverting(false);
         }
@@ -293,6 +316,23 @@ export default function App() {
       </header>
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start justify-between gap-3 animate-in fade-in slide-in-from-top-4 shadow-sm">
+            <div className="flex items-start gap-3 mt-0.5">
+              <AlertCircle size={20} className="shrink-0" />
+              <p className="font-medium text-sm leading-relaxed">{error.message}</p>
+            </div>
+            {error.isDismissible && (
+              <button 
+                onClick={() => setError(null)}
+                className="text-red-500 hover:text-red-700 hover:bg-red-100 p-1 rounded-md transition-colors shrink-0"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+        )}
+
         {isKeyModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -384,13 +424,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
-            <AlertCircle size={20} />
-            <p className="font-medium">{error}</p>
           </div>
         )}
 
