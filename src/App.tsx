@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { UploadCloud, FileText, Loader2, Copy, Check, RefreshCw, Download, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileText, Loader2, Copy, Check, RefreshCw, Download, AlertCircle, Key, X } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -21,7 +21,39 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'preview' | 'markdown'>('preview');
   const [error, setError] = useState<string | null>(null);
+  const [customApiKey, setCustomApiKey] = useState<string>('');
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [tempKey, setTempKey] = useState('');
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [keyTestStatus, setKeyTestStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const testAndSaveApiKey = async () => {
+    if (!tempKey.trim()) return;
+    
+    setIsTestingKey(true);
+    setKeyTestStatus('idle');
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: tempKey.trim() });
+      await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: 'Hello',
+      });
+      
+      setKeyTestStatus('success');
+      setCustomApiKey(tempKey.trim());
+      setTimeout(() => {
+        setIsKeyModalOpen(false);
+        setKeyTestStatus('idle');
+      }, 1500);
+    } catch (e) {
+      console.error("API Key test failed:", e);
+      setKeyTestStatus('error');
+    } finally {
+      setIsTestingKey(false);
+    }
+  };
 
   const handleError = (msg: string) => {
     setError(msg);
@@ -73,7 +105,7 @@ export default function App() {
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: customApiKey || process.env.GEMINI_API_KEY });
       
       // Read file as base64
       const reader = new FileReader();
@@ -192,19 +224,115 @@ export default function App() {
             </div>
             <h1 className="text-xl font-bold tracking-tight text-zinc-900">PDF to Markdown</h1>
           </div>
-          {file && (
+          <div className="flex items-center gap-3">
             <button
-              onClick={reset}
-              className="text-sm font-medium text-zinc-500 hover:text-zinc-900 flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-zinc-100 transition-colors"
+              onClick={() => {
+                setTempKey(customApiKey);
+                setKeyTestStatus('idle');
+                setIsKeyModalOpen(true);
+              }}
+              className={`text-sm font-medium flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors ${
+                customApiKey 
+                  ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' 
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
+              }`}
+              title="Use your own Gemini API Key"
             >
-              <RefreshCw size={16} />
-              Start Over
+              <Key size={16} />
+              {customApiKey ? 'Custom Key Active' : 'Set API Key'}
             </button>
-          )}
+            {file && (
+              <button
+                onClick={reset}
+                className="text-sm font-medium text-zinc-500 hover:text-zinc-900 flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-zinc-100 transition-colors"
+              >
+                <RefreshCw size={16} />
+                Start Over
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
+        {isKeyModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+                  <Key size={18} className="text-indigo-600" />
+                  Set Custom API Key
+                </h3>
+                <button 
+                  onClick={() => setIsKeyModalOpen(false)}
+                  className="text-zinc-400 hover:text-zinc-600 transition-colors p-1 rounded-md hover:bg-zinc-100"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-zinc-500 mb-4">
+                  Nhập Gemini API key để sử dụng quota của riêng bạn. <span className="font-medium text-emerald-600">Key của bạn chỉ được lưu tạm thời trong bộ nhớ của trình duyệt (không lưu trữ trên máy chủ) để đảm bảo an toàn.</span>
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <input
+                      type="password"
+                      value={tempKey}
+                      onChange={(e) => setTempKey(e.target.value)}
+                      placeholder="AIzaSy..."
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono text-sm"
+                      autoFocus
+                    />
+                  </div>
+                  
+                  {keyTestStatus === 'success' && (
+                    <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg">
+                      <Check size={16} />
+                      API Key verified successfully!
+                    </div>
+                  )}
+                  
+                  {keyTestStatus === 'error' && (
+                    <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                      <AlertCircle size={16} />
+                      Invalid API Key. Please check and try again.
+                    </div>
+                  )}
+                  
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setIsKeyModalOpen(false)}
+                      className="flex-1 px-4 py-2.5 bg-white border border-zinc-200 text-zinc-700 rounded-xl font-medium hover:bg-zinc-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={testAndSaveApiKey}
+                      disabled={!tempKey.trim() || isTestingKey || keyTestStatus === 'success'}
+                      className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isTestingKey ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Testing...
+                        </>
+                      ) : keyTestStatus === 'success' ? (
+                        <>
+                          <Check size={16} />
+                          Saved
+                        </>
+                      ) : (
+                        'Test & Save'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
             <AlertCircle size={20} />
