@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { UploadCloud, FileText, Loader2, Copy, Check, RefreshCw, Download, AlertCircle, Key, X } from 'lucide-react';
+import { UploadCloud, FileText, Loader2, Copy, Check, RefreshCw, Download, AlertCircle, Key, X, Settings } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -22,8 +22,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'preview' | 'markdown'>('preview');
   const [error, setError] = useState<string | null>(null);
   const [customApiKey, setCustomApiKey] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-pro');
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const [tempKey, setTempKey] = useState('');
+  const [tempModel, setTempModel] = useState('gemini-2.5-pro');
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [keyTestStatus, setKeyTestStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,8 +47,19 @@ export default function App() {
     return '';
   };
 
-  const testAndSaveApiKey = async () => {
-    if (!tempKey.trim()) return;
+  const saveSettings = async () => {
+    setSelectedModel(tempModel);
+
+    if (!tempKey.trim()) {
+      setCustomApiKey('');
+      setIsKeyModalOpen(false);
+      return;
+    }
+
+    if (tempKey.trim() === customApiKey) {
+      setIsKeyModalOpen(false);
+      return;
+    }
     
     setIsTestingKey(true);
     setKeyTestStatus('idle');
@@ -140,7 +153,7 @@ export default function App() {
         
         try {
           const response = await ai.models.generateContentStream({
-            model: 'gemini-2.5-pro',
+            model: selectedModel,
             contents: [
               {
                 parts: [
@@ -252,6 +265,7 @@ export default function App() {
             <button
               onClick={() => {
                 setTempKey(customApiKey);
+                setTempModel(selectedModel);
                 setKeyTestStatus('idle');
                 setIsKeyModalOpen(true);
               }}
@@ -260,10 +274,10 @@ export default function App() {
                   ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' 
                   : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
               }`}
-              title="Use your own Gemini API Key"
+              title="Settings & API Key"
             >
-              <Key size={16} />
-              {customApiKey ? 'Custom Key Active' : 'Set API Key'}
+              <Settings size={16} />
+              Settings
             </button>
             {file && (
               <button
@@ -284,8 +298,8 @@ export default function App() {
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
               <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
-                  <Key size={18} className="text-indigo-600" />
-                  Set Custom API Key
+                  <Settings size={18} className="text-indigo-600" />
+                  Settings
                 </h3>
                 <button 
                   onClick={() => setIsKeyModalOpen(false)}
@@ -295,18 +309,34 @@ export default function App() {
                 </button>
               </div>
               <div className="p-6">
-                <p className="text-sm text-zinc-500 mb-4">
-                  Nhập Gemini API key để sử dụng quota của riêng bạn. <span className="font-medium text-emerald-600">Key của bạn chỉ được lưu tạm thời trong bộ nhớ của trình duyệt (không lưu trữ trên máy chủ) để đảm bảo an toàn.</span>
-                </p>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div>
+                    <label className="block text-sm font-medium text-zinc-900 mb-2">AI Model</label>
+                    <select
+                      value={tempModel}
+                      onChange={(e) => setTempModel(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-zinc-900"
+                    >
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro (Stable)</option>
+                      <option value="gemini-3-pro-preview">Gemini 3.0 Pro Preview</option>
+                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                    </select>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Select the model to use for PDF conversion. Preview models may require specific API Key access.
+                    </p>
+                  </div>
+
+                  <div className="pt-4 border-t border-zinc-100">
+                    <label className="block text-sm font-medium text-zinc-900 mb-2">Custom API Key (Optional)</label>
+                    <p className="text-xs text-zinc-500 mb-3">
+                      Nhập Gemini API key để sử dụng quota của riêng bạn. <span className="font-medium text-emerald-600">Key của bạn chỉ được lưu tạm thời trong bộ nhớ của trình duyệt (không lưu trữ trên máy chủ) để đảm bảo an toàn.</span>
+                    </p>
                     <input
                       type="password"
                       value={tempKey}
                       onChange={(e) => setTempKey(e.target.value)}
                       placeholder="AIzaSy..."
                       className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono text-sm"
-                      autoFocus
                     />
                   </div>
                   
@@ -332,8 +362,8 @@ export default function App() {
                       Cancel
                     </button>
                     <button
-                      onClick={testAndSaveApiKey}
-                      disabled={!tempKey.trim() || isTestingKey || keyTestStatus === 'success'}
+                      onClick={saveSettings}
+                      disabled={isTestingKey || keyTestStatus === 'success'}
                       className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isTestingKey ? (
@@ -347,7 +377,7 @@ export default function App() {
                           Saved
                         </>
                       ) : (
-                        'Test & Save'
+                        'Save Settings'
                       )}
                     </button>
                   </div>
@@ -371,7 +401,7 @@ export default function App() {
                 Convert PDF to <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">Markdown</span>
               </h2>
               <p className="text-lg text-zinc-500 max-w-2xl mx-auto">
-                Transform your PDF documents into clean, structured Markdown instantly. Powered by Gemini 2.5 Pro for unparalleled accuracy in extracting text, tables, and formatting.
+                Transform your PDF documents into clean, structured Markdown instantly. Powered by Google Gemini models for unparalleled accuracy in extracting text, tables, and formatting.
               </p>
             </div>
 
@@ -419,8 +449,8 @@ export default function App() {
                 <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-6">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                 </div>
-                <h4 className="text-lg font-semibold text-zinc-900 mb-2">Gemini 2.5 Pro</h4>
-                <p className="text-zinc-500 leading-relaxed">Powered by Google's most capable multimodal model for unparalleled conversion accuracy.</p>
+                <h4 className="text-lg font-semibold text-zinc-900 mb-2">Google Gemini</h4>
+                <p className="text-zinc-500 leading-relaxed">Choose from Google's most capable multimodal models for unparalleled conversion accuracy.</p>
               </div>
             </div>
           </div>
