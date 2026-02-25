@@ -28,6 +28,23 @@ export default function App() {
   const [keyTestStatus, setKeyTestStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const getApiKey = () => {
+    if (customApiKey) return customApiKey;
+    try {
+      // @ts-ignore
+      if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
+        // @ts-ignore
+        return import.meta.env.VITE_GEMINI_API_KEY;
+      }
+    } catch (e) {}
+    try {
+      if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
+        return process.env.GEMINI_API_KEY;
+      }
+    } catch (e) {}
+    return '';
+  };
+
   const testAndSaveApiKey = async () => {
     if (!tempKey.trim()) return;
     
@@ -37,7 +54,7 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey: tempKey.trim() });
       await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash',
         contents: 'Hello',
       });
       
@@ -105,7 +122,14 @@ export default function App() {
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: customApiKey || process.env.GEMINI_API_KEY });
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        handleError('API Key is missing. Please set your Gemini API Key first.');
+        setIsConverting(false);
+        return;
+      }
+      
+      const ai = new GoogleGenAI({ apiKey });
       
       // Read file as base64
       const reader = new FileReader();
@@ -116,7 +140,7 @@ export default function App() {
         
         try {
           const response = await ai.models.generateContentStream({
-            model: 'gemini-3.1-pro-preview',
+            model: 'gemini-2.5-pro',
             contents: [
               {
                 parts: [
@@ -347,7 +371,7 @@ export default function App() {
                 Convert PDF to <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">Markdown</span>
               </h2>
               <p className="text-lg text-zinc-500 max-w-2xl mx-auto">
-                Transform your PDF documents into clean, structured Markdown instantly. Powered by Gemini 3.1 Pro for unparalleled accuracy in extracting text, tables, and formatting.
+                Transform your PDF documents into clean, structured Markdown instantly. Powered by Gemini 2.5 Pro for unparalleled accuracy in extracting text, tables, and formatting.
               </p>
             </div>
 
@@ -395,7 +419,7 @@ export default function App() {
                 <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-6">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                 </div>
-                <h4 className="text-lg font-semibold text-zinc-900 mb-2">Gemini 3.1 Pro</h4>
+                <h4 className="text-lg font-semibold text-zinc-900 mb-2">Gemini 2.5 Pro</h4>
                 <p className="text-zinc-500 leading-relaxed">Powered by Google's most capable multimodal model for unparalleled conversion accuracy.</p>
               </div>
             </div>
